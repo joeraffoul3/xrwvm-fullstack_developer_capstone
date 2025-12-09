@@ -1,5 +1,7 @@
-# from django.contrib import admin
-# from .models import related models
+from django.contrib import admin
+from .models import related_models
+
+admin.site.register(related_models)
 
 
 # Register your models here.
