@@ -14,7 +14,7 @@ import logging
 import json
 from django.views.decorators.csrf import csrf_exempt
 from .populate import initiate
-
+from .restapis import get_request, analyze_review_sentiments
 from .models import CarMake, CarModel
 
 def get_cars(request):
@@ -109,15 +109,70 @@ def registration(request):
 # a list of dealerships
 # def get_dealerships(request):
 # ...
-
+#Update the `get_dealerships` render list of dealerships all by default, particular state if state is passed
+def get_dealerships(request, state="All"):
+    if(state == "All"):
+        endpoint = "/fetchDealers"
+    else:
+        endpoint = "/fetchDealers/"+state
+    dealerships = get_request(endpoint)
+    return JsonResponse({"status":200,"dealers":dealerships})
 # Create a `get_dealer_reviews` view to render the reviews of a dealer
 # def get_dealer_reviews(request,dealer_id):
 # ...
+# 🔹 Step 2 – get a single dealer's details
+def get_dealer_details(request, dealer_id):
+    # build endpoint for this dealer
+    endpoint = f"/fetchDealer/{dealer_id}"
+    dealer_detail = get_request(endpoint)
+    return JsonResponse({"status": 200, "dealer": dealer_detail})
 
+
+# 🔹 Step 3 – get reviews for a dealer + call sentiment microservice
+def get_dealer_reviews(request, dealer_id):
+    # 1) fetch reviews from your Node/Mongo microservice
+    endpoint = f"/fetchReviews/dealer/{dealer_id}"
+    reviews = get_request(endpoint)
+
+    # 2) for each review, call sentiment analyzer and attach sentiment
+    for review in reviews:
+        text = review.get("review", "")
+        if not text:
+            review["sentiment"] = "neutral"
+            continue
+
+        sentiment_result = analyze_review_sentiments(text)
+
+        # try to extract sentiment string from the JSON returned
+        sentiment = None
+        if isinstance(sentiment_result, dict):
+            # depending on your microservice it may be "sentiment" or "label"
+            sentiment = (
+                sentiment_result.get("sentiment")
+                or sentiment_result.get("label")
+            )
+        else:
+            # if it returns a plain string
+            sentiment = str(sentiment_result)
+
+        review["sentiment"] = sentiment or "neutral"
+
+    # 3) return JSON with all reviews + sentiments
+    return JsonResponse({"status": 200, "reviews": reviews})
 # Create a `get_dealer_details` view to render the dealer details
 # def get_dealer_details(request, dealer_id):
 # ...
 
 # Create a `add_review` view to submit a review
+def add_review(request):
+    if(request.user.is_anonymous == False):
+        data = json.loads(request.body)
+        try:
+            response = post_review(data)
+            return JsonResponse({"status":200})
+        except:
+            return JsonResponse({"status":401,"message":"Error in posting review"})
+    else:
+        return JsonResponse({"status":403,"message":"Unauthorized"})
 # def add_review(request):
 # ...
